@@ -1,6 +1,6 @@
-# project-gsd
+# fieldops-app
 
-A minimal FastAPI service template: Pydantic settings, async SQLModel on MySQL,
+FieldOps API service: FastAPI, Pydantic settings, async SQLModel on MySQL,
 and pytest. Plain `pip` and `pyproject.toml`, no build system to maintain.
 
 ## Stack

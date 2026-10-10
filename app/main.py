@@ -17,5 +17,5 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title="project-gsd", lifespan=lifespan)
+app = FastAPI(title="fieldops-app", lifespan=lifespan)
 app.include_router(health.router)
