@@ -1,0 +1,32 @@
+[project]
+name = "project-gsd"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.143",
+    "uvicorn[standard]>=0.54",
+    "pydantic>=2.14",
+    "pydantic-settings>=2.15",
+    "sqlmodel>=0.0.48",
+    "sqlalchemy[asyncio]>=2.1",
+    "asyncmy>=0.2.16",
+    # MySQL 8.4's default auth (caching_sha2_password) needs it.
+    "cryptography>=50",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "httpx2>=2.13",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
