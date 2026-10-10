@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: docker.io/library/mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: gsd
+      MYSQL_USER: gsd
+      MYSQL_PASSWORD: gsd
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mysql-data:
