@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     # Matches compose.yaml; override with DATABASE_URL in the environment or .env.
-    database_url: str = "mysql+asyncmy://gsd:gsd@127.0.0.1:3306/gsd"
+    database_url: str = "mysql+asyncmy://fieldops:fieldops@127.0.0.1:3306/fieldops"
 
 
 settings = Settings()
