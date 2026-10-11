@@ -1,8 +1,10 @@
 import pytest
+from fastapi.testclient import TestClient
 from sqlmodel import func, select, text
 
 from app.db import get_session
 from app.main import app
+from app.processing import InlineProcessor, get_processor
 from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
 
 ITEM_KEYS = ["fire_exit_clear", "first_aid_stocked"]
@@ -193,3 +195,47 @@ def test_retry_of_processed_submission_returns_it_unchanged(client, run_db):
     assert retry.json() == first.json()
     assert count_submissions(run_db) == 1
     assert count_answers(run_db) == len(ITEM_KEYS)
+
+
+INTERNAL_ERROR = {"error": {"code": "internal_error", "message": "Internal error"}}
+
+
+class FlakyProcessor:
+    """Fails the first call, as if the processing backend were briefly down."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def process(self, session, submission):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("processing backend down")
+        await InlineProcessor().process(session, submission)
+
+
+def stored_status(run_db) -> str:
+    async def status(session):
+        return (await session.exec(select(Submission))).one().status
+
+    return run_db(status)
+
+
+def test_retry_processes_a_submission_left_not_processed(client, run_db):
+    site_id = seed_site(run_db)
+    flaky = FlakyProcessor()
+    app.dependency_overrides[get_processor] = lambda: flaky
+    # A 500 is returned to the client, not raised into the test.
+    phone = TestClient(app, raise_server_exceptions=False)
+
+    first = phone.post("/submissions", json=payload(site_id))
+
+    assert first.status_code == 500
+    assert first.json() == INTERNAL_ERROR
+    assert stored_status(run_db) == "not_processed"
+
+    retry = phone.post("/submissions", json=payload(site_id))
+
+    assert retry.status_code == 200
+    assert retry.json()["status"] == "processed"
+    assert stored_status(run_db) == "processed"
+    assert count_submissions(run_db) == 1
