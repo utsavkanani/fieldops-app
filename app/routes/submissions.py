@@ -53,13 +53,17 @@ async def create_submission(
                 ChecklistTemplate.version == body.template_version,
             )
         )
-    ).one()
+    ).first()
+    if template is None:
+        raise SubmissionRejected(f"site {body.site_id} has no template v{body.template_version}")
 
     submission = Submission(
         site_id=body.site_id,
         template_id=template.id,
         device_id=body.device_id,
         captured_at=body.captured_at.astimezone(UTC).replace(tzinfo=None),
+        # A superseded version is kept, not rejected: the manager already walked the site.
+        needs_review=not template.is_current,
     )
     session.add(submission)
     await session.flush()
