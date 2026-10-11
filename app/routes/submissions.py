@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -36,14 +36,18 @@ class SubmissionOut(BaseModel):
     "",
     response_model=SubmissionOut,
     status_code=201,
-    responses={400: {"model": ErrorEnvelope}},
+    responses={
+        200: {"model": SubmissionOut, "description": "A retry of an existing submission"},
+        400: {"model": ErrorEnvelope},
+    },
 )
 async def create_submission(
     body: SubmissionIn,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     processor: Annotated[SubmissionProcessor, Depends(get_processor)],
 ) -> SubmissionOut:
-    submission = await submit(
+    submission, created = await submit(
         session,
         processor,
         site_id=body.site_id,
@@ -52,4 +56,6 @@ async def create_submission(
         captured_at=body.captured_at,
         answers=[(a.item_key, a.passed) for a in body.answers],
     )
+    # 201 for a new submission, 200 when this request was a retry of one we already have.
+    response.status_code = 201 if created else 200
     return SubmissionOut(id=submission.id, status=submission.status)
