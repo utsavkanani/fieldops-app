@@ -12,7 +12,14 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.errors import SubmissionRejected
-from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
+from app.models import (
+    ChecklistTemplate,
+    Site,
+    Submission,
+    SubmissionAnswer,
+    SubmissionStatus,
+    TemplateItem,
+)
 from app.processing import SubmissionProcessor
 
 
@@ -87,6 +94,9 @@ async def _handle_retry(
         raise SubmissionRejected(
             f"device {existing.device_id} reused captured_at {existing.captured_at} for another site"
         )
+    # Stored earlier but processing failed: this retry is what triggers it again.
+    if existing.status != SubmissionStatus.PROCESSED:
+        await processor.process(session, existing)
     return SubmitResult(existing, created=False)
 
 

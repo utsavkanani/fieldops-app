@@ -32,7 +32,7 @@ REJECTED = ErrorEnvelope(error=ErrorDetail(code="invalid_submission", message="S
 
 async def _submission_rejected(request: Request, exc: SubmissionRejected) -> JSONResponse:
     logger.warning("Submission rejected: %s", exc.reason)
-    return JSONResponse(status_code=400, content=REJECTED.model_dump())
+    return JSONResponse(status_code=400, content=REJECTED.model_dump(mode="json"))
 
 
 async def _request_invalid(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -41,7 +41,17 @@ async def _request_invalid(request: Request, exc: RequestValidationError) -> JSO
     return await _submission_rejected(request, SubmissionRejected(f"invalid request {reasons}"))
 
 
+INTERNAL = ErrorEnvelope(error=ErrorDetail(code="internal_error", message="Internal error"))
+
+
+async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(status_code=500, content=INTERNAL.model_dump(mode="json"))
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SubmissionRejected, _submission_rejected)
+    # Anything unexpected: same envelope, a 500 the phone will retry, details only in the log.
+    app.add_exception_handler(Exception, _unexpected)
     # FastAPI's default is a 422 with field-level detail; this keeps one envelope, no detail.
     app.add_exception_handler(RequestValidationError, _request_invalid)
