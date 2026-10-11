@@ -8,7 +8,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db import get_session
 from app.errors import ErrorEnvelope, SubmissionRejected
-from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, SubmissionStatus
+from app.models import (
+    ChecklistTemplate,
+    Site,
+    Submission,
+    SubmissionAnswer,
+    SubmissionStatus,
+    TemplateItem,
+)
 from app.processing import SubmissionProcessor, get_processor
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -56,6 +63,19 @@ async def create_submission(
     ).first()
     if template is None:
         raise SubmissionRejected(f"site {body.site_id} has no template v{body.template_version}")
+
+    # Checked against the version the manager answered, not the current one.
+    expected = set(
+        (await session.exec(select(TemplateItem.key).where(TemplateItem.template_id == template.id))).all()
+    )
+    submitted = [a.item_key for a in body.answers]
+    if len(submitted) != len(set(submitted)) or set(submitted) != expected:
+        repeated = sorted({k for k in submitted if submitted.count(k) > 1})
+        raise SubmissionRejected(
+            f"answers don't match site {body.site_id} template v{body.template_version}: "
+            f"missing={sorted(expected - set(submitted))} extra={sorted(set(submitted) - expected)} "
+            f"repeated={repeated}"
+        )
 
     submission = Submission(
         site_id=body.site_id,

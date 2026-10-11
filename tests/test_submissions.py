@@ -1,3 +1,4 @@
+import pytest
 from sqlmodel import func, select, text
 
 from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
@@ -21,7 +22,7 @@ def seed_site(run_db) -> int:
     return run_db(seed)
 
 
-def publish_version(run_db, site_id: int, version: int) -> None:
+def publish_version(run_db, site_id: int, version: int, keys: list[str] = ITEM_KEYS) -> None:
     """Make `version` the site's current template; earlier versions become superseded."""
 
     async def publish(session):
@@ -32,7 +33,7 @@ def publish_version(run_db, site_id: int, version: int) -> None:
         template = ChecklistTemplate(site_id=site_id, version=version, is_current=True)
         session.add(template)
         await session.flush()
-        session.add_all(TemplateItem(template_id=template.id, key=key) for key in ITEM_KEYS)
+        session.add_all(TemplateItem(template_id=template.id, key=key) for key in keys)
         await session.commit()
 
     run_db(publish)
@@ -118,3 +119,38 @@ def test_version_that_never_existed_is_rejected(client, run_db):
     assert response.status_code == 400
     assert response.json() == REJECTED
     assert count_submissions(run_db) == 0
+
+
+def answers(*keys: str) -> list[dict]:
+    return [{"item_key": key, "passed": True} for key in keys]
+
+
+@pytest.mark.parametrize(
+    "bad_answers",
+    [
+        pytest.param(answers("fire_exit_clear"), id="missing-item"),
+        pytest.param(answers(*ITEM_KEYS, "not_on_template"), id="extra-item"),
+        pytest.param(answers(*ITEM_KEYS, "fire_exit_clear"), id="repeated-item"),
+    ],
+)
+def test_answers_must_match_the_template_exactly(client, run_db, bad_answers):
+    site_id = seed_site(run_db)
+
+    response = client.post("/submissions", json=payload(site_id, answers=bad_answers))
+
+    assert response.status_code == 400
+    assert response.json() == REJECTED
+    assert count_submissions(run_db) == 0
+
+
+def test_answers_are_checked_against_the_version_answered(client, run_db):
+    site_id = seed_site(run_db)
+    publish_version(run_db, site_id, version=2, keys=[*ITEM_KEYS, "ladder_secured"])
+
+    # v1 answered with v2's items: wrong for the version it claims.
+    v2_items_as_v1 = payload(site_id, template_version=1, answers=answers(*ITEM_KEYS, "ladder_secured"))
+    assert client.post("/submissions", json=v2_items_as_v1).status_code == 400
+
+    # v1 answered with v1's items: fine, even though v2 is current.
+    v1_items = payload(site_id, template_version=1, captured_at="2026-10-10T09:00:00Z")
+    assert client.post("/submissions", json=v1_items).status_code == 201
