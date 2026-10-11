@@ -1,4 +1,4 @@
-from sqlmodel import select
+from sqlmodel import select, text
 
 from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
 
@@ -43,9 +43,12 @@ def test_valid_submission_is_stored_and_processed(client, run_db):
     async def stored(session):
         submission = (await session.exec(select(Submission))).one()
         answers = (await session.exec(select(SubmissionAnswer))).all()
-        return submission, answers
+        raw_status = (await session.exec(text("SELECT status FROM submission"))).scalar_one()
+        return submission, answers, raw_status
 
-    submission, answers = run_db(stored)
+    submission, answers, raw_status = run_db(stored)
     assert submission.id == body["id"]
     assert submission.status == "processed"
+    # The table stores the same value the API returns.
+    assert raw_status == "processed"
     assert sorted(a.item_key for a in answers) == ITEM_KEYS

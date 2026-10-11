@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Enum, UniqueConstraint
 from sqlalchemy.dialects.mysql import DATETIME
 from sqlmodel import Field, SQLModel
 
@@ -40,7 +40,11 @@ class Submission(SQLModel, table=True):
     device_id: str = Field(max_length=100)
     # UTC, microsecond precision; plain MySQL DATETIME would drop the fraction.
     captured_at: datetime = Field(sa_type=DATETIME(fsp=6))
-    status: SubmissionStatus = SubmissionStatus.NOT_PROCESSED
+    # Store the enum's values ("processed"), not its names, so the table matches the API.
+    status: SubmissionStatus = Field(
+        default=SubmissionStatus.NOT_PROCESSED,
+        sa_type=Enum(SubmissionStatus, values_callable=lambda e: [m.value for m in e]),
+    )
 
 
 class SubmissionAnswer(SQLModel, table=True):
