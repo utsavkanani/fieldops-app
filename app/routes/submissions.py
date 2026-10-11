@@ -31,7 +31,8 @@ class SubmissionIn(BaseModel):
     device_id: str = Field(min_length=1, max_length=100)
     template_version: int
     captured_at: AwareDatetime
-    answers: list[AnswerIn]
+    # Caps the work a hostile request can cause; rejected before any database access.
+    answers: list[AnswerIn] = Field(max_length=200)
 
 
 class SubmissionOut(BaseModel):
