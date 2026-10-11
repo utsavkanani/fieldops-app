@@ -239,3 +239,28 @@ def test_retry_processes_a_submission_left_not_processed(client, run_db):
     assert retry.json()["status"] == "processed"
     assert stored_status(run_db) == "processed"
     assert count_submissions(run_db) == 1
+
+
+def test_concurrent_retry_that_loses_the_insert_race_is_a_duplicate(client, run_db, monkeypatch):
+    from app.services import submissions as service
+
+    site_id = seed_site(run_db)
+    first = client.post("/submissions", json=payload(site_id))
+
+    # The other request inserted between this one's lookup and its insert: the lookup
+    # misses once, and the insert then hits the unique constraint.
+    real_find = service._find_existing
+    calls = 0
+
+    async def stale_on_first_call(*args):
+        nonlocal calls
+        calls += 1
+        return None if calls == 1 else await real_find(*args)
+
+    monkeypatch.setattr(service, "_find_existing", stale_on_first_call)
+
+    retry = client.post("/submissions", json=payload(site_id))
+
+    assert retry.status_code == 200
+    assert retry.json() == first.json()
+    assert count_submissions(run_db) == 1

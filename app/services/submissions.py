@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import NamedTuple
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -62,7 +63,16 @@ async def submit(
         needs_review=not template.is_current,
     )
     session.add(submission)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        # Lost a race: a concurrent retry inserted the same (device_id, captured_at)
+        # after our lookup. The unique constraint caught it; treat this one as the retry.
+        await session.rollback()
+        existing = await _find_existing(session, device_id, captured_at_utc)
+        if existing is None:
+            raise
+        return await _handle_retry(session, processor, existing, site_id)
     session.add_all(
         SubmissionAnswer(submission_id=submission.id, item_key=key, passed=passed)
         for key, passed in answers
