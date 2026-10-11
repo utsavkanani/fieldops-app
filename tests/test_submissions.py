@@ -1,8 +1,9 @@
-from sqlmodel import select, text
+from sqlmodel import func, select, text
 
 from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
 
 ITEM_KEYS = ["fire_exit_clear", "first_aid_stocked"]
+REJECTED = {"error": {"code": "invalid_submission", "message": "Submission rejected"}}
 
 
 def seed_site(run_db) -> int:
@@ -52,3 +53,20 @@ def test_valid_submission_is_stored_and_processed(client, run_db):
     # The table stores the same value the API returns.
     assert raw_status == "processed"
     assert sorted(a.item_key for a in answers) == ITEM_KEYS
+
+
+def count_submissions(run_db) -> int:
+    async def count(session):
+        return (await session.exec(select(func.count()).select_from(Submission))).one()
+
+    return run_db(count)
+
+
+def test_unknown_site_is_rejected_without_detail(client, run_db):
+    seed_site(run_db)
+
+    response = client.post("/submissions", json=payload(site_id=999_999))
+
+    assert response.status_code == 400
+    assert response.json() == REJECTED
+    assert count_submissions(run_db) == 0

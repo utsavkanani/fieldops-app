@@ -7,7 +7,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db import get_session
-from app.models import ChecklistTemplate, Submission, SubmissionAnswer, SubmissionStatus
+from app.errors import ErrorEnvelope, SubmissionRejected
+from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, SubmissionStatus
 from app.processing import SubmissionProcessor, get_processor
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
@@ -31,12 +32,20 @@ class SubmissionOut(BaseModel):
     status: SubmissionStatus
 
 
-@router.post("", response_model=SubmissionOut, status_code=201)
+@router.post(
+    "",
+    response_model=SubmissionOut,
+    status_code=201,
+    responses={400: {"model": ErrorEnvelope}},
+)
 async def create_submission(
     body: SubmissionIn,
     session: Annotated[AsyncSession, Depends(get_session)],
     processor: Annotated[SubmissionProcessor, Depends(get_processor)],
 ) -> SubmissionOut:
+    if await session.get(Site, body.site_id) is None:
+        raise SubmissionRejected(f"unknown site {body.site_id}")
+
     template = (
         await session.exec(
             select(ChecklistTemplate).where(
