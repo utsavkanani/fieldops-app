@@ -173,3 +173,23 @@ def test_oversized_answer_list_is_rejected_before_touching_the_database(client):
 
     assert response.status_code == 400
     assert response.json() == REJECTED
+
+
+def count_answers(run_db) -> int:
+    async def count(session):
+        return (await session.exec(select(func.count()).select_from(SubmissionAnswer))).one()
+
+    return run_db(count)
+
+
+def test_retry_of_processed_submission_returns_it_unchanged(client, run_db):
+    site_id = seed_site(run_db)
+
+    first = client.post("/submissions", json=payload(site_id))
+    retry = client.post("/submissions", json=payload(site_id))
+
+    assert first.status_code == 201
+    assert retry.status_code == 200
+    assert retry.json() == first.json()
+    assert count_submissions(run_db) == 1
+    assert count_answers(run_db) == len(ITEM_KEYS)
