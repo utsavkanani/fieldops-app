@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -34,5 +35,13 @@ async def _submission_rejected(request: Request, exc: SubmissionRejected) -> JSO
     return JSONResponse(status_code=400, content=REJECTED.model_dump())
 
 
+async def _request_invalid(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Location and error type only; the input values could be huge or hostile.
+    reasons = [f"{'.'.join(map(str, e['loc']))}: {e['type']}" for e in exc.errors()[:5]]
+    return await _submission_rejected(request, SubmissionRejected(f"invalid request {reasons}"))
+
+
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SubmissionRejected, _submission_rejected)
+    # FastAPI's default is a 422 with field-level detail; this keeps one envelope, no detail.
+    app.add_exception_handler(RequestValidationError, _request_invalid)

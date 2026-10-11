@@ -1,6 +1,8 @@
 import pytest
 from sqlmodel import func, select, text
 
+from app.db import get_session
+from app.main import app
 from app.models import ChecklistTemplate, Site, Submission, SubmissionAnswer, TemplateItem
 
 ITEM_KEYS = ["fire_exit_clear", "first_aid_stocked"]
@@ -154,3 +156,20 @@ def test_answers_are_checked_against_the_version_answered(client, run_db):
     # v1 answered with v1's items: fine, even though v2 is current.
     v1_items = payload(site_id, template_version=1, captured_at="2026-10-10T09:00:00Z")
     assert client.post("/submissions", json=v1_items).status_code == 201
+
+
+def test_oversized_answer_list_is_rejected_before_touching_the_database(client):
+    class NoDatabase:
+        def __getattr__(self, name):
+            raise AssertionError(f"database used: session.{name}")
+
+    async def no_database():
+        yield NoDatabase()
+
+    app.dependency_overrides[get_session] = no_database
+    flood = answers(*(f"item_{i}" for i in range(201)))
+
+    response = client.post("/submissions", json=payload(site_id=1, answers=flood))
+
+    assert response.status_code == 400
+    assert response.json() == REJECTED
