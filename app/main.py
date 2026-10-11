@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from sqlmodel import SQLModel
 
 from app.db import engine
+from app.errors import install_error_handlers
 from app.routes import health, submissions
 
 
@@ -20,3 +21,4 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="fieldops-app", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(submissions.router)
+install_error_handlers(app)
