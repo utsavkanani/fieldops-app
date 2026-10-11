@@ -17,6 +17,9 @@ class ChecklistTemplate(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     site_id: int = Field(foreign_key="site.id")
     version: int
+    # Exactly one current template per site. Not enforced by the database yet: whatever
+    # publishes templates must flip the old one off in the same transaction.
+    is_current: bool = False
 
 
 class TemplateItem(SQLModel, table=True):
@@ -45,6 +48,8 @@ class Submission(SQLModel, table=True):
         default=SubmissionStatus.NOT_PROCESSED,
         sa_type=Enum(SubmissionStatus, values_callable=lambda e: [m.value for m in e]),
     )
+    # Answered against a superseded template version: kept, but someone should look at it.
+    needs_review: bool = False
 
 
 class SubmissionAnswer(SQLModel, table=True):
